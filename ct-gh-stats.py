@@ -55,6 +55,17 @@ def get_traffic(endpoint):
 
 
 def get_releases():
+    """Get data about release assets from the releases API.
+
+    Gets download counts for each of the assets attached to the releases on
+    GitHub. The GitHub API only provides total download counts and no historical
+    data, so this function should be run with the desired frequency of data
+    collection. The data are loaded into a `~pandas.DataFrame` and combined with
+    any existing data. Historical data are stored in JSON files in the local
+    directory named for the ``endpoint`` passed in. The JSON storage is probably
+    a temporary solution until we see what other means would be more
+    appropriate.
+    """
     r = requests.get(
         urljoin(URL, "releases"), headers={"Accept": "application/vnd.github.v3+json"}
     )
@@ -71,13 +82,16 @@ def get_releases():
 
             new_df[col_name] = int(asset["download_count"])
 
-    if (HERE / "releases.json").exists():
-        old_df = pd.read_json(HERE / "releases.json", convert_dates=True)
+    database = HERE / "releases.json"
+    if database.exists():
+        old_df = pd.read_json(database, convert_dates=True)
     else:
         old_df = pd.DataFrame()
 
+    # Combine the new data with the old, overwriting any old data with
+    # new data. This ensures any overlapping data are the most up-to-date.
     df = new_df.combine_first(old_df)
-    df.to_json("releases.json", date_format="iso")
+    df.to_json(database, date_format="iso")
 
 
 if __name__ == "__main__":
