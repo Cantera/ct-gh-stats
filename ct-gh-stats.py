@@ -18,42 +18,40 @@ headers = {
 }
 
 
-def get_clones():
-    r = requests.get(urljoin(URL, "traffic/clones"), headers=headers)
+def get_traffic(endpoint):
+    """Get data from the traffic API at the input endpoint.
+
+    Gets the specified data, ``'clones'`` or ``'views'``, from the GitHub
+    traffic API. Uses the v3 API to retrieve JSON output. The data from this API
+    contains 2 weeks of data at a daily frequency. The data are loaded into a
+    `~pandas.DataFrame` and combined with any existing data. Historical data are
+    stored in JSON files in the local directory named for the ``endpoint``
+    passed in. The JSON storage is probably a temporary solution until we see
+    what other means would be more appropriate.
+
+    :param endpoint: String representing the endpoint to get data from. Designed
+        to be one of ``'clones'`` or ``'views'``.
+    """
+    traffic = "traffic/{}".format(endpoint)
+    r = requests.get(urljoin(URL, traffic), headers=headers)
     r.raise_for_status()
 
-    if (HERE / "clones.json").exists():
-        old_df = pd.read_json(HERE / "clones.json", convert_dates=True)
+    database = HERE / "{}.json".format(endpoint)
+    if database.exists():
+        old_df = pd.read_json(database, convert_dates=True)
     else:
         old_df = pd.DataFrame()
 
-    new_df = pd.DataFrame.from_dict(r.json()["clones"])
+    new_df = pd.DataFrame.from_dict(r.json()[endpoint])
     datetime_index = pd.to_datetime(new_df["timestamp"])
     new_df = new_df.set_index(datetime_index)
     new_df = new_df.drop("timestamp", axis=1)
     new_df = new_df.astype(int)
 
+    # Combine the new data with the old, overwriting any old data with
+    # new data. This ensures any overlapping data are the most up-to-date.
     df = new_df.combine_first(old_df)
-    df.to_json("clones.json", date_format="iso")
-
-
-def get_views():
-    r = requests.get(urljoin(URL, "traffic/views"), headers=headers)
-    r.raise_for_status()
-
-    if (HERE / "views.json").exists():
-        old_df = pd.read_json(HERE / "views.json", convert_dates=True)
-    else:
-        old_df = pd.DataFrame()
-
-    new_df = pd.DataFrame.from_dict(r.json()["views"])
-    datetime_index = pd.to_datetime(new_df["timestamp"])
-    new_df = new_df.set_index(datetime_index)
-    new_df = new_df.drop("timestamp", axis=1)
-    new_df = new_df.astype(int)
-
-    df = new_df.combine_first(old_df)
-    df.to_json("views.json", date_format="iso")
+    df.to_json(database, date_format="iso")
 
 
 def get_releases():
@@ -85,10 +83,8 @@ def get_releases():
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise ValueError("Must pass an argument to the script")
-    if sys.argv[1] == "clones":
-        get_clones()
-    elif sys.argv[1] == "views":
-        get_views()
+    elif sys.argv[1] in ["clones", "views"]:
+        get_traffic(sys.argv[1])
     elif sys.argv[1] == "releases":
         get_releases()
     else:
